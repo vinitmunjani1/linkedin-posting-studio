@@ -1,0 +1,17 @@
+# Local secrets and runtime config
+.env
+secrets.txt
+tunnel-access.txt
+
+# Runtime data: tokens, posts, audit logs
+/data/*
+!/data/.gitkeep
+
+# Uploaded media
+/uploads/*
+!/uploads/.gitkeep
+
+# Dependencies / build artifacts
+node_modules/
+npm-debug.log*
+.DS_Store
