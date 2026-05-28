@@ -5,7 +5,7 @@ import path from 'node:path';
 import { config, validateConfig } from './config.js';
 import { extractUrlPreview } from './extract.js';
 import { buildAuthUrl, exchangeCodeForToken, getUserInfo, publishMediaPost, publishTextPost } from './linkedin.js';
-import { UPLOADS_DIR, approveIntake, approvePost, audit, countPublishedSince, createIntake, createPost, ensureUploadsDir, getPost, getToken, getUserToken, listDueScheduledPosts, listIntake, listPosts, markFailed, markPublished, markPublishing, rejectIntake, saveToken, schedulePost, tokenIsExpired, validateMediaPath, validatePostText, httpError } from './store.js';
+import { UPLOADS_DIR, approveIntake, approvePost, audit, countPublishedSince, createIntake, createPost, ensureUploadsDir, getPost, getToken, getUserToken, listDueScheduledPosts, listIntake, listPosts, markFailed, markPublished, markPublishing, rejectIntake, saveChannelAccount, saveToken, schedulePost, tokenIsExpired, validateMediaPath, validatePostText, httpError } from './store.js';
 
 const sessions = new Map();
 
@@ -42,7 +42,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/') return html(res, await homeHtml(url, session));
     if (req.method === 'GET' && url.pathname === '/health') return json(res, { ok: true, dryRun: config.dryRun, schedulerEnabled: config.schedulerEnabled, maxPostsPerDay: config.maxPostsPerDay, missingConfig: validateConfig() });
-    if (req.method === 'GET' && url.pathname === '/auth/linkedin') return startAuth(res, session);
+    if (req.method === 'GET' && url.pathname === '/auth/linkedin') return startAuth(res, session, url);
     if (req.method === 'GET' && url.pathname === '/auth/linkedin/callback') return await handleCallback(url, res, session);
     if (req.method === 'GET' && url.pathname === '/posts') return json(res, await listPosts(session.linkedinSub));
     if (req.method === 'GET' && url.pathname === '/intake') return json(res, await listIntake(session.linkedinSub));
@@ -74,7 +74,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-function startAuth(res, session) {
+function startAuth(res, session, urlObj = null) {
+  if (urlObj?.searchParams.get('discord_channel_id')) session.discordChannelId = urlObj.searchParams.get('discord_channel_id');
   const missing = validateConfig();
   if (missing.length) throw httpError(400, `Missing config: ${missing.join(', ')}`);
   const { url, state } = buildAuthUrl();
@@ -111,9 +112,16 @@ async function handleCallback(url, res, session) {
   session.authed = true;
   session.linkedinSub = user.sub;
   session.linkedinName = user.name || user.email || user.sub;
-  await audit('oauth_connected', { linkedinSub: user.sub });
+  if (session.discordChannelId) {
+    await saveChannelAccount(session.discordChannelId, {
+      ownerSub: user.sub,
+      ownerName: session.linkedinName,
+      ownerEmail: user.email || ''
+    });
+  }
+  await audit('oauth_connected', { linkedinSub: user.sub, discordChannelId: session.discordChannelId });
 
-  res.writeHead(302, { Location: '/?connected=1' });
+  res.writeHead(302, { Location: session.discordChannelId ? '/?connected=discord' : '/?connected=1' });
   res.end();
 }
 

@@ -10,6 +10,7 @@ const TOKEN_PATH = path.join(DATA_DIR, 'token.json');
 const TOKENS_DIR = path.join(DATA_DIR, 'tokens');
 const AUDIT_PATH = path.join(DATA_DIR, 'audit.log');
 const INTAKE_PATH = path.join(DATA_DIR, 'intake.json');
+const CHANNEL_ACCOUNTS_PATH = path.join(DATA_DIR, 'channel-accounts.json');
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -64,6 +65,33 @@ export async function getUserToken(ownerSub) {
 
 function safeOwner(value) {
   return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+
+export async function getChannelAccount(channelId) {
+  if (!channelId) return null;
+  const mappings = await readJson(CHANNEL_ACCOUNTS_PATH, {});
+  return mappings[channelId] || null;
+}
+
+export async function saveChannelAccount(channelId, account) {
+  if (!channelId) throw httpError(400, 'Missing Discord channel id');
+  if (!account?.ownerSub) throw httpError(400, 'Missing LinkedIn owner id');
+  const mappings = await readJson(CHANNEL_ACCOUNTS_PATH, {});
+  mappings[channelId] = {
+    channelId,
+    ownerSub: account.ownerSub,
+    ownerName: account.ownerName || account.ownerSub,
+    ownerEmail: account.ownerEmail || '',
+    connectedAt: new Date().toISOString()
+  };
+  await writeJson(CHANNEL_ACCOUNTS_PATH, mappings);
+  await audit('channel_account_connected', { channelId, ownerSub: account.ownerSub });
+  return mappings[channelId];
+}
+
+export async function listChannelAccounts() {
+  return readJson(CHANNEL_ACCOUNTS_PATH, {});
 }
 
 export function tokenIsExpired(token, skewMs = 5 * 60 * 1000) {

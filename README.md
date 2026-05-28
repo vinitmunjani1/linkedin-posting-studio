@@ -78,3 +78,28 @@ Security:
 
 - Do not commit `DISCORD_BOT_TOKEN`.
 - The bot does not publish directly; it only creates approval items.
+
+### v2 Channel Workspace Model
+
+Each Discord channel can be connected to one LinkedIn account.
+
+Commands:
+
+```text
+!connect-linkedin
+!account
+!approve <intake_id>
+!schedule <intake_id> YYYY-MM-DD HH:mm
+!reject <intake_id>
+```
+
+Flow:
+
+1. Create a Discord channel for a LinkedIn account/workspace.
+2. Run `!connect-linkedin` in that channel.
+3. Sign in with LinkedIn using the generated link.
+4. Share URLs in that channel.
+5. Bot extracts a draft preview and replies with approval commands.
+6. Approve now or schedule in IST from Discord.
+
+The web UI is only needed for the first LinkedIn login or manual v1 management.
