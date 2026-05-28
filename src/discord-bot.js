@@ -24,12 +24,12 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (config.discord.channelId && message.channelId !== config.discord.channelId) return;
 
-    const text = String(message.content || '').trim();
-    if (/^!(connect|connect-linkedin)\b/i.test(text)) return handleConnect(message);
-    if (/^!(account|status)\b/i.test(text)) return handleAccount(message);
-    if (/^!(approve|post-now)\b/i.test(text)) return handleApproveNow(message, text);
-    if (/^!schedule\b/i.test(text)) return handleSchedule(message, text);
-    if (/^!reject\b/i.test(text)) return handleReject(message, text);
+    const text = normalizeCommandText(message);
+    if (/^[!\/](connect|connect-linkedin)\b/i.test(text)) return handleConnect(message);
+    if (/^[!\/](account|status)\b/i.test(text)) return handleAccount(message);
+    if (/^[!\/](approve|post-now)\b/i.test(text)) return handleApproveNow(message, text);
+    if (/^[!\/]schedule\b/i.test(text)) return handleSchedule(message, text);
+    if (/^[!\/]reject\b/i.test(text)) return handleReject(message, text);
 
     const url = extractFirstUrl(text);
     if (!url) return;
@@ -129,6 +129,17 @@ async function requireAccount(message) {
 
 function publicBaseUrl() {
   return (config.discord.publicBaseUrl || 'https://linkpost.infinitycorp.tech').replace(/\/$/, '');
+}
+
+function normalizeCommandText(message) {
+  let text = String(message.content || '').trim();
+  const botId = client.user?.id;
+  if (botId) {
+    text = text.replace(new RegExp(`^<@!?${botId}>\\s*`), '').trim();
+  }
+  // Also tolerate copied display-name mentions when Discord provides plain content in some clients.
+  text = text.replace(/^@LinkedIn_assist\s*/i, '').trim();
+  return text;
 }
 
 function extractFirstUrl(text) {
