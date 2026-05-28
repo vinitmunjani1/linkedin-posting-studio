@@ -15,3 +15,6 @@ tunnel-access.txt
 node_modules/
 npm-debug.log*
 .DS_Store
+
+# Local CLI config
+.config/

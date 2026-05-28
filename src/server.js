@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config, validateConfig } from './config.js';
+import { extractUrlPreview } from './extract.js';
 import { buildAuthUrl, exchangeCodeForToken, getUserInfo, publishMediaPost, publishTextPost } from './linkedin.js';
-import { UPLOADS_DIR, approvePost, audit, countPublishedSince, createPost, ensureUploadsDir, getPost, getToken, getUserToken, listDueScheduledPosts, listPosts, markFailed, markPublished, markPublishing, saveToken, schedulePost, tokenIsExpired, validateMediaPath, validatePostText, httpError } from './store.js';
+import { UPLOADS_DIR, approveIntake, approvePost, audit, countPublishedSince, createIntake, createPost, ensureUploadsDir, getPost, getToken, getUserToken, listDueScheduledPosts, listIntake, listPosts, markFailed, markPublished, markPublishing, rejectIntake, saveToken, schedulePost, tokenIsExpired, validateMediaPath, validatePostText, httpError } from './store.js';
 
 const sessions = new Map();
 
@@ -44,6 +45,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/auth/linkedin') return startAuth(res, session);
     if (req.method === 'GET' && url.pathname === '/auth/linkedin/callback') return await handleCallback(url, res, session);
     if (req.method === 'GET' && url.pathname === '/posts') return json(res, await listPosts(session.linkedinSub));
+    if (req.method === 'GET' && url.pathname === '/intake') return json(res, await listIntake(session.linkedinSub));
+    if (req.method === 'POST' && url.pathname === '/intake/form') return await handleIntakeForm(req, res, session);
+    if (req.method === 'POST' && url.pathname === '/api/v2/intake/url') return json(res, await handleIntakeApi(req), 201);
     if (req.method === 'POST' && url.pathname === '/drafts/form') return await handleDraftForm(req, res, session);
     if (req.method === 'POST' && url.pathname === '/uploads') return json(res, await handleUpload(req), 201);
     if (req.method === 'POST' && url.pathname === '/posts') return json(res, await createPost({ ...(await readJsonBody(req)), ownerSub: session.linkedinSub, ownerName: session.linkedinName }), 201);
@@ -53,6 +57,12 @@ const server = http.createServer(async (req, res) => {
 
     const scheduleMatch = req.method === 'POST' && url.pathname.match(/^\/posts\/([^/]+)\/schedule$/);
     if (scheduleMatch) return json(res, await schedulePost(scheduleMatch[1], (await readFormOrJsonBody(req)).scheduledFor, session.linkedinSub));
+
+    const intakeApproveMatch = req.method === 'POST' && url.pathname.match(/^\/intake\/([^/]+)\/approve$/);
+    if (intakeApproveMatch) return json(res, await approveIntake(intakeApproveMatch[1], { ownerSub: session.linkedinSub, ownerName: session.linkedinName, scheduledFor: (await readFormOrJsonBody(req)).scheduledFor }));
+
+    const intakeRejectMatch = req.method === 'POST' && url.pathname.match(/^\/intake\/([^/]+)\/reject$/);
+    if (intakeRejectMatch) return json(res, await rejectIntake(intakeRejectMatch[1], session.linkedinSub));
 
     const publishMatch = req.method === 'POST' && url.pathname.match(/^\/posts\/([^/]+)\/publish$/);
     if (publishMatch) return json(res, await publishPost(publishMatch[1], { manual: true, ownerSub: session.linkedinSub }));
@@ -159,6 +169,7 @@ function startOfUtcDay(date) {
 
 async function homeHtml(url = new URL('http://localhost/'), session = {}) {
   const posts = await listPosts(session.linkedinSub);
+  const intakeItems = await listIntake(session.linkedinSub);
   const token = await getUserToken(session.linkedinSub) || await getToken();
   const missing = validateConfig();
   const counts = posts.reduce((acc, post) => {
@@ -171,6 +182,14 @@ async function homeHtml(url = new URL('http://localhost/'), session = {}) {
     .sort((a, b) => Date.parse(a.scheduledFor) - Date.parse(b.scheduledFor))[0];
   const isLinkedInConnected = Boolean(token?.access_token) && !tokenIsExpired(token);
   const connectLabel = isLinkedInConnected ? `Connected: ${escapeHtml(token.linkedin_user?.name || 'LinkedIn')}` : 'Connect LinkedIn';
+
+  const intakeRows = intakeItems.slice(0, 8).map((item) => `
+    <tr>
+      <td><div class="post-text">${escapeHtml(item.title || item.sourceUrl)}</div><div class="post-meta">${escapeHtml(item.source)} · ${escapeHtml(item.sourceUrl)}</div></td>
+      <td><span class="badge status-${escapeHtml(item.status)}">${escapeHtml(item.status)}</span></td>
+      <td>${escapeHtml(item.caption || '').slice(0, 220)}</td>
+      <td class="actions-cell"><button class="btn btn-primary" onclick="call('/intake/${item.id}/approve')">Approve to draft</button><button class="btn btn-secondary" onclick="call('/intake/${item.id}/reject')">Reject</button></td>
+    </tr>`).join('');
 
   const rows = posts.map((post) => `
     <tr>
@@ -238,6 +257,18 @@ async function homeHtml(url = new URL('http://localhost/'), session = {}) {
     </div>
 
     <div class="card">
+      <div class="card-head"><h2>v2 Intake</h2><p class="muted">Paste a URL or let Discord create these items. Approve to turn into a v1 draft.</p></div>
+      <div class="card-body">
+        <form method="post" action="/intake/form">
+          <label for="sourceUrl">URL</label>
+          <input id="sourceUrl" name="sourceUrl" type="url" placeholder="https://example.com/post" required>
+          <button class="btn btn-primary btn-wide" type="submit">Extract URL</button>
+        </form>
+        <div class="table-wrap" style="margin-top:18px"><table class="posts-table"><thead><tr><th>Source</th><th>Status</th><th>Caption draft</th><th>Actions</th></tr></thead><tbody>${intakeRows || '<tr><td class="empty" colspan="4">No intake items yet.</td></tr>'}</tbody></table></div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-head"><h2>Queue</h2><p class="muted">${nextScheduled ? `Next scheduled: ${escapeHtml(formatDateTimeLocal(nextScheduled.scheduledFor))} IST` : 'No scheduled posts yet.'}</p></div>
       <div class="card-body table-wrap">
         <table class="posts-table"><thead><tr><th>Post</th><th>Status</th><th>Scheduled</th><th>Actions</th></tr></thead><tbody>${rows || '<tr><td class="empty" colspan="4">No drafts yet. Create your first post on the left.</td></tr>'}</tbody></table>
@@ -260,6 +291,30 @@ async function schedule(event, id){
 </body></html>`;
 }
 
+
+
+async function handleIntakeForm(req, res, session = {}) {
+  const body = await readFormBody(req);
+  const preview = await extractUrlPreview(body.sourceUrl);
+  await createIntake({ ...preview, source: 'manual', ownerSub: session.linkedinSub, ownerName: session.linkedinName });
+  return redirect(res, '/');
+}
+
+async function handleIntakeApi(req) {
+  if (config.discord.intakeSecret) {
+    const provided = req.headers['x-intake-secret'] || '';
+    if (provided !== config.discord.intakeSecret) throw httpError(401, 'Invalid intake secret');
+  }
+  const body = await readJsonBody(req);
+  const preview = await extractUrlPreview(body.url || body.sourceUrl);
+  return createIntake({
+    ...preview,
+    source: body.source || 'api',
+    ownerSub: body.ownerSub || null,
+    ownerName: body.ownerName || '',
+    discord: body.discord || null
+  });
+}
 
 async function handleDraftForm(req, res, session = {}) {
   const form = await readMultipartForm(req);

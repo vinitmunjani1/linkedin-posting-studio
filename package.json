@@ -6,9 +6,13 @@
   "description": "Safe LinkedIn posting MVP: OAuth, draft approval, dry-run, and API publishing.",
   "scripts": {
     "start": "node src/server.js",
-    "check": "node --check src/server.js && node --check src/linkedin.js && node --check src/store.js && node --check src/config.js"
+    "check": "node --check src/server.js && node --check src/linkedin.js && node --check src/store.js && node --check src/config.js && node --check src/extract.js && node --check src/discord-bot.js",
+    "start:discord": "node src/discord-bot.js"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3"
   }
 }

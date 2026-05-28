@@ -47,3 +47,34 @@ Do not commit `.env`, `secrets.txt`, runtime token data, or uploaded media. They
 - Times are stored internally as UTC.
 - Scheduler checks every `SCHEDULER_INTERVAL_MS`.
 - Daily cap defaults to 3 posts/day.
+
+## v2 Discord Intake
+
+Discord intake is separate from the v1 publisher. It creates approval items; approved items become normal v1 drafts.
+
+Flow:
+
+1. Run the web app with `npm start`.
+2. Configure Discord env values in `.env`.
+3. Run the Discord intake bot:
+
+```bash
+npm run start:discord
+```
+
+4. Share a URL in the configured Discord channel.
+5. The bot extracts metadata/media and creates a pending intake item.
+6. Open the Posting Studio dashboard, review the caption, and approve it to create a draft.
+7. Schedule/publish through the v1 engine.
+
+Required Discord setup:
+
+- Create a Discord application + bot.
+- Enable Message Content Intent.
+- Invite the bot with permission to read/send messages in the target channel.
+- Set `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`, and `PUBLIC_BASE_URL`.
+
+Security:
+
+- Do not commit `DISCORD_BOT_TOKEN`.
+- The bot does not publish directly; it only creates approval items.

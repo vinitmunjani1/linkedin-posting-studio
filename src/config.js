@@ -30,6 +30,12 @@ export const config = {
   schedulerEnabled: String(process.env.SCHEDULER_ENABLED ?? 'true').toLowerCase() !== 'false',
   schedulerIntervalMs: Number(process.env.SCHEDULER_INTERVAL_MS || 60_000),
   maxPostsPerDay: Number(process.env.MAX_POSTS_PER_DAY || 3),
+  discord: {
+    botToken: process.env.DISCORD_BOT_TOKEN || '',
+    channelId: process.env.DISCORD_CHANNEL_ID || '',
+    intakeSecret: process.env.DISCORD_INTAKE_SECRET || '',
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || ''
+  },
   linkedin: {
     allowedSub: process.env.LINKEDIN_ALLOWED_SUB || '',
     allowedEmail: process.env.LINKEDIN_ALLOWED_EMAIL || '',

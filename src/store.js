@@ -9,6 +9,7 @@ const POSTS_PATH = path.join(DATA_DIR, 'posts.json');
 const TOKEN_PATH = path.join(DATA_DIR, 'token.json');
 const TOKENS_DIR = path.join(DATA_DIR, 'tokens');
 const AUDIT_PATH = path.join(DATA_DIR, 'audit.log');
+const INTAKE_PATH = path.join(DATA_DIR, 'intake.json');
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -67,6 +68,83 @@ function safeOwner(value) {
 
 export function tokenIsExpired(token, skewMs = 5 * 60 * 1000) {
   return Boolean(token?.expires_at && Date.now() + skewMs >= token.expires_at);
+}
+
+
+export async function listIntake(ownerSub = null) {
+  const items = await readJson(INTAKE_PATH, []);
+  return ownerSub ? items.filter((item) => !item.ownerSub || item.ownerSub === ownerSub) : items;
+}
+
+export async function getIntake(id, ownerSub = null) {
+  const items = await listIntake(ownerSub);
+  return items.find((item) => item.id === id) || null;
+}
+
+export async function createIntake({ ownerSub = null, ownerName = '', source = 'manual', sourceUrl, title = '', description = '', caption = '', mediaPath = null, mediaType = null, discord = null }) {
+  if (!sourceUrl) throw httpError(400, 'sourceUrl is required');
+  const now = new Date().toISOString();
+  const item = {
+    id: crypto.randomUUID(),
+    ownerSub,
+    ownerName: String(ownerName || '').trim(),
+    source,
+    sourceUrl,
+    title: String(title || '').trim(),
+    description: String(description || '').trim(),
+    caption: String(caption || title || sourceUrl).trim(),
+    mediaPath: mediaPath ? validateMediaPath(mediaPath) : null,
+    mediaType,
+    discord,
+    status: 'pending',
+    createdAt: now,
+    updatedAt: now,
+    approvedAt: null,
+    draftPostId: null,
+    rejectedAt: null
+  };
+  const items = await readJson(INTAKE_PATH, []);
+  items.unshift(item);
+  await writeJson(INTAKE_PATH, items);
+  await audit('intake_created', { id: item.id, source: item.source, ownerSub: item.ownerSub });
+  return item;
+}
+
+export async function approveIntake(id, { ownerSub, ownerName = '', scheduledFor = null } = {}) {
+  const items = await readJson(INTAKE_PATH, []);
+  const item = items.find((entry) => entry.id === id && (!entry.ownerSub || entry.ownerSub === ownerSub));
+  if (!item) throw httpError(404, 'Intake item not found');
+  if (item.status === 'approved' && item.draftPostId) throw httpError(409, 'Intake item already approved');
+  const post = await createPost({
+    ownerSub,
+    ownerName,
+    text: item.caption,
+    scheduledFor,
+    mediaPath: item.mediaPath,
+    mediaTitle: item.title,
+    mediaDescription: item.description
+  });
+  item.status = 'approved';
+  item.ownerSub = ownerSub;
+  item.ownerName = ownerName;
+  item.approvedAt = new Date().toISOString();
+  item.updatedAt = item.approvedAt;
+  item.draftPostId = post.id;
+  await writeJson(INTAKE_PATH, items);
+  await audit('intake_approved', { id: item.id, postId: post.id, ownerSub });
+  return { item, post };
+}
+
+export async function rejectIntake(id, ownerSub = null) {
+  const items = await readJson(INTAKE_PATH, []);
+  const item = items.find((entry) => entry.id === id && (!entry.ownerSub || entry.ownerSub === ownerSub));
+  if (!item) throw httpError(404, 'Intake item not found');
+  item.status = 'rejected';
+  item.rejectedAt = new Date().toISOString();
+  item.updatedAt = item.rejectedAt;
+  await writeJson(INTAKE_PATH, items);
+  await audit('intake_rejected', { id: item.id, ownerSub });
+  return item;
 }
 
 export async function listPosts(ownerSub = null) {
