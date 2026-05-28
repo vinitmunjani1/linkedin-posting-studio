@@ -256,17 +256,6 @@ async function homeHtml(url = new URL('http://localhost/'), session = {}) {
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-head"><h2>v2 Intake</h2><p class="muted">Paste a URL or let Discord create these items. Approve to turn into a v1 draft.</p></div>
-      <div class="card-body">
-        <form method="post" action="/intake/form">
-          <label for="sourceUrl">URL</label>
-          <input id="sourceUrl" name="sourceUrl" type="url" placeholder="https://example.com/post" required>
-          <button class="btn btn-primary btn-wide" type="submit">Extract URL</button>
-        </form>
-        <div class="table-wrap" style="margin-top:18px"><table class="posts-table"><thead><tr><th>Source</th><th>Status</th><th>Caption draft</th><th>Actions</th></tr></thead><tbody>${intakeRows || '<tr><td class="empty" colspan="4">No intake items yet.</td></tr>'}</tbody></table></div>
-      </div>
-    </div>
 
     <div class="card">
       <div class="card-head"><h2>Queue</h2><p class="muted">${nextScheduled ? `Next scheduled: ${escapeHtml(formatDateTimeLocal(nextScheduled.scheduledFor))} IST` : 'No scheduled posts yet.'}</p></div>
